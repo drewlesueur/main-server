@@ -57,29 +57,33 @@ app.all('*', function(req, res){
   var thePath = req.path
   var preSitePath = sitesFolder + req.host
   var runWithIt = function (sitePath) {
-    fs.exists(preSitePath + "/index_all", function (exists) {
+    fs.exists(sitePath, function (exists) {
       if (exists) {
-        setupEnvs(req);  
-        spawnIt(preSitePath + "/index_all")
-      } else {
-        fs.exists(sitePath, function (exists) {
-          if (exists) {
-            fs.stat(sitePath, function (err, stats) {
-              if (stats.isDirectory()) {
-                res.sendfile(sitePath + "/index.html")
-              } else if (isExecutablePermission(stats.mode)) {
-                console.log("it is executable")
-                //exec(sitePath, function (err, stdout, stderror) {
-                //  res.send(stdout.toString())
-                //}) 
-                setupEnvs(req)
-                spawnIt(sitePath, req, res)
-              } else {
-                console.log("not executable!")
-                res.sendfile(sitePath)
-              }
-            })
+        fs.stat(sitePath, function (err, stats) {
+          if (stats.isDirectory()) {
+            res.sendfile(sitePath + "/index.html")
+          } else if (isExecutablePermission(stats.mode)) {
+            console.log("it is executable")
+            //exec(sitePath, function (err, stdout, stderror) {
+            //  res.send(stdout.toString())
+            //}) 
+            setupEnvs(req)
+            spawnIt(sitePath, req, res)
+          } else {
+            console.log("not executable!")
+            res.sendfile(sitePath)
+          }
+        })
 
+      } else {
+        fs.exists(preSitePath + "/index_all", function (exists) {
+          if (exists) {
+            setupEnvs(req);  
+            console.log("got here")
+            console.log(preSitePath)
+
+            setupEnvs(req)
+            spawnIt(preSitePath + "/index_all", req, res)
           } else {
             res.send("this file is not found. Locally we tried to look at " + sitePath, 404)
           }
