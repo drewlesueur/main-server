@@ -21,35 +21,69 @@ var isExecutablePermission = function (mode) {
   return answer;
 }
 
+var setupEnvs = function (req) {
+  //TODO: maybe more like cgi
+  process.env.query_json = JSON.stringify(req.query)
+  process.env.body_json = JSON.stringify(req.body)
+  process.env.http_path = req.path
+  process.env.http_host = req.host
+  //todo: files
+}
+
+var spawnIt = function (path, req, res) {
+  var spawned = spawn(path);
+  //res.set("Content-Type", "text/plain"); // for now;
+  req.pipe(spawned.stdin)
+ 
+  var onData = function (data) {
+    var header = data.toString()
+    if (header.substr(0, 12) == "Content-Type") {
+      //spawned.stdout.write(data.toString())
+      res.set("Content-Type", header.substr(13))
+      spawned.stdout.pipe(res)  
+      spawned.stdout.removeListener("data", onData)
+    } else {
+      res.write(data)
+      spawned.stdout.pipe(res)  
+      spawned.stdout.removeListener("data", onData)
+    }
+  }
+  spawned.stdout.on("data", onData)
+}
+
+// todo: break out these nested funcitons.
 app.all('*', function(req, res){
   var folder = req.host;
   var thePath = req.path
   var preSitePath = sitesFolder + req.host
   var runWithIt = function (sitePath) {
-    fs.exists(sitePath, function (exists) {
+    fs.exists(preSitePath + "/index_all", function (exists) {
       if (exists) {
-        fs.stat(sitePath, function (err, stats) {
-          if (stats.isDirectory()) {
-            res.sendfile(sitePath + "/index.html")
-          } else if (isExecutablePermission(stats.mode)) {
-            console.log("it is executable")
-            //exec(sitePath, function (err, stdout, stderror) {
-            //  res.send(stdout.toString())
-            //}) 
-            process.env.query_json = JSON.stringify(req.query)
-            process.env.body_json = JSON.stringify(req.body)
-            var spawned = spawn(sitePath);
-            res.set("Content-Type", "text/plain"); // for now;
-            req.pipe(spawned.stdin)
-            spawned.stdout.pipe(res)
+        setupEnvs(req);  
+        spawnIt(preSitePath + "/index_all")
+      } else {
+        fs.exists(sitePath, function (exists) {
+          if (exists) {
+            fs.stat(sitePath, function (err, stats) {
+              if (stats.isDirectory()) {
+                res.sendfile(sitePath + "/index.html")
+              } else if (isExecutablePermission(stats.mode)) {
+                console.log("it is executable")
+                //exec(sitePath, function (err, stdout, stderror) {
+                //  res.send(stdout.toString())
+                //}) 
+                setupEnvs(req)
+                spawnIt(sitePath, req, res)
+              } else {
+                console.log("not executable!")
+                res.sendfile(sitePath)
+              }
+            })
+
           } else {
-            console.log("not executable!")
-            res.sendfile(sitePath)
+            res.send("this file is not found. Locally we tried to look at " + sitePath, 404)
           }
         })
-
-      } else {
-        res.send("this file is not found. Locally we tried to look at " + sitePath, 404)
       }
     })
   }
